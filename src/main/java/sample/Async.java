@@ -42,114 +42,114 @@ import javax.servlet.http.HttpServletResponse;
 
 @WebServlet(urlPatterns = "/Async", asyncSupported = true)
 public class Async extends HttpServlet {
-	private static final long serialVersionUID = 1L;
-	
-	@Resource
-	ManagedScheduledExecutorService scheduler;
-	@Resource
-	ScheduledExecutorService executor;
+    private static final long serialVersionUID = 1L;
+    
+    @Resource
+    ManagedScheduledExecutorService scheduler;
+    @Resource
+    ScheduledExecutorService executor;
 
-	public Async() {
-	}
-	
-	// our userdata
-	class Baton {
-		AsyncContext ctx;
-		Future<?> workerFuture;
-		ManagedScheduledExecutorService scheduler;
-		Future<?> checkerFuture;
-	}
-	
+    public Async() {
+    }
+    
+    // our userdata
+    class Baton {
+        AsyncContext ctx;
+        Future<?> workerFuture;
+        ManagedScheduledExecutorService scheduler;
+        Future<?> checkerFuture;
+    }
+    
 
-	protected void print(Baton baton, String msg) { 
-		print(baton.ctx, msg);
-	}
-	
-	protected void print(AsyncContext ctx, String msg) { 
-		PrintWriter out;
-		try {
-			out = ctx.getResponse().getWriter();
-			synchronized(ctx) { 
-				out.print(msg);
-				out.flush();
-			}
-		} catch (IOException e) {
-			// XXX: examples are lenient!
-		}
-	}
-	
-	protected void doGet(HttpServletRequest request, HttpServletResponse response)
-			throws ServletException, IOException {
-		
-		final AsyncContext ctx = request.startAsync();
+    protected void print(Baton baton, String msg) { 
+        print(baton.ctx, msg);
+    }
+    
+    protected void print(AsyncContext ctx, String msg) { 
+        PrintWriter out;
+        try {
+            out = ctx.getResponse().getWriter();
+            synchronized(ctx) { 
+                out.print(msg);
+                out.flush();
+            }
+        } catch (IOException e) {
+            // XXX: examples are lenient!
+        }
+    }
+    
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        
+        final AsyncContext ctx = request.startAsync();
 
-		print(ctx, "servlet initial thread is running\n");
+        print(ctx, "servlet initial thread is running\n");
 
-		// Kick off our slow work on another thread using the injected executor
-		Future<?>  result  = this.executor.submit(new DoWork(ctx));
-		Baton baton = new Baton();
-		baton.ctx = ctx;
-		baton.scheduler = this.scheduler;
-		baton.workerFuture = result;
+        // Kick off our slow work on another thread using the injected executor
+        Future<?>  result  = this.executor.submit(new DoWork(ctx));
+        Baton baton = new Baton();
+        baton.ctx = ctx;
+        baton.scheduler = this.scheduler;
+        baton.workerFuture = result;
 
-		// Start pulsing our checker thread
-		baton.checkerFuture = this.scheduler.scheduleAtFixedRate(new Checker(baton), 1000, 1000, TimeUnit.MILLISECONDS);
-		
-		print(baton, "\n\nservlet initial thread is done\n");
-	}
-	
-	// periodically run via the scheduler to check on the response and keep the connection busy
-	class Checker implements Runnable {
-		Baton baton;
-		PrintWriter out;
-		int limit = 20;
+        // Start pulsing our checker thread
+        baton.checkerFuture = this.scheduler.scheduleAtFixedRate(new Checker(baton), 1000, 1000, TimeUnit.MILLISECONDS);
+        
+        print(baton, "\n\nservlet initial thread is done\n");
+    }
+    
+    // periodically run via the scheduler to check on the response and keep the connection busy
+    class Checker implements Runnable {
+        Baton baton;
+        PrintWriter out;
+        int limit = 20;
 
-		public Checker(Baton b) throws IOException {
-			baton = b;
-		}
+        public Checker(Baton b) throws IOException {
+            baton = b;
+        }
 
-		@Override
-		public void run() {
-			if (baton.workerFuture.isDone() || baton.workerFuture.isCancelled()) { 
-				print(baton, "\n response complete");
-				baton.ctx.complete();
-				// Stop calling us back
-				baton.checkerFuture.cancel(true);
-			}
-			else if (limit-- <= 0) { 
-				print(baton, "Time up");
-				// Kill our worker runnable
-				baton.workerFuture.cancel(true);
-				// Stop calling us back
-				baton.checkerFuture.cancel(true);
-			}
-			else { 
-				print(baton, "#");
-			}
-		}
-	}
-	
-	// Pretends to do some slow blocking thing
-	class DoWork implements Runnable {
-		AsyncContext ctx;
-		PrintWriter out;
+        @Override
+        public void run() {
+            if (baton.workerFuture.isDone() || baton.workerFuture.isCancelled()) { 
+                print(baton, "\n response complete");
+                baton.ctx.complete();
+                // Stop calling us back
+                baton.checkerFuture.cancel(true);
+            }
+            else if (limit-- <= 0) { 
+                print(baton, "Time up");
+                // Kill our worker runnable
+                baton.workerFuture.cancel(true);
+                // Stop calling us back
+                baton.checkerFuture.cancel(true);
+            }
+            else { 
+                print(baton, "#");
+            }
+        }
+    }
+    
+    // Pretends to do some slow blocking thing
+    class DoWork implements Runnable {
+        AsyncContext ctx;
+        PrintWriter out;
 
-		DoWork(AsyncContext ctx) throws IOException {
-			this.ctx = ctx;
-			out = ctx.getResponse().getWriter();
-		}
+        DoWork(AsyncContext ctx) throws IOException {
+            this.ctx = ctx;
+            out = ctx.getResponse().getWriter();
+        }
 
-		@Override
-		public void run() {
-				print(ctx, "callable is running\n");
-			try {
-				// Pretend to do something slow
-				Thread.sleep(10 * 1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			print(ctx, "callable is DONE\n");
-		}
-	}
+        @Override
+        public void run() {
+                print(ctx, "callable is running\n");
+            try {
+                // Pretend to do something slow
+                Thread.sleep(10 * 1000);
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            print(ctx, "callable is DONE\n");
+        }
+    }
 }
