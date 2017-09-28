@@ -1,0 +1,6 @@
+---
+applications:
+- name: covwsoc
+  memory: 256M
+  host: covwsoc
+  domain: mybluemix.net
